@@ -38,6 +38,14 @@ class NNEvaluater:
 
 	self.use_recents = (int(self.locx_t.shape[3]) == 3)
 
+    def pwin_size(self):
+        if self.pwin_t.shape[1] == 1:
+            return 1
+        elif self.pwin_t.shape[1] == 3:
+            return 3
+        else:
+            return ValueError("Weird pwin shape!")
+
     def eval_many(self, nips):
 	""" Take a list of nips, evaluate them, and return an array of pwins
 	    and movelogitses """

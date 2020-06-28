@@ -32,7 +32,7 @@ parser.add_argument('--debug', action='store_true')
 parser.add_argument('spfiles', metavar='S', type=str, nargs='+', help='a file with selfplay binary logs')
 args = parser.parse_args()
 
-print "get our current neural net"
+print "get our current neural net: %s" % (args.model)
 ix = args.model.rfind('/')
 if ix == -1:
     model_dir = "./"
@@ -63,7 +63,13 @@ l1 = graph.get_tensor_by_name("total_l1:0")
 l2 = graph.get_tensor_by_name("total_l2:0")
 l3 = graph.get_tensor_by_name("total_l3:0")
 movelogits = graph.get_tensor_by_name("movelogits:0")
-pwin_ = graph.get_tensor_by_name("pwin_:0")
+pwin = graph.get_tensor_by_name("pwin:0")
+if pwin.shape[1] == 1:
+    pwin_ = graph.get_tensor_by_name("pwin_:0")
+    pwin_size = 1
+else:
+    pwin_ = graph.get_tensor_by_name("pwin3_:0")
+    pwin_size = 3
 pmove_ = graph.get_tensor_by_name("pmove_:0")
 
 train_step = graph.get_collection("optimizer")[0]
@@ -130,7 +136,12 @@ def collect_one_train_state():
 	fi.f.seek(y*naf.LearningState.NUM_BYTES)
 	b = fi.f.read(naf.LearningState.NUM_BYTES)
 	assert len(b) == naf.LearningState.NUM_BYTES
-	ts = naf.LearningState.from_bytes(b, "%s:%d" % (fi.name, y))
+        try:
+            ts = naf.LearningState.from_bytes(b, "%s:%d" % (fi.name, y))
+        except ValueError as ve:
+            print "Errored on %s:%d!!" % (fi.name, y)
+            continue
+
 	if ts.N.any():
 	    r = random.randint(0, 3)
 	    ts.nips.rotate(r)
@@ -144,7 +155,7 @@ peg_batch = numpy.zeros((args.batch_size, S, S, 2))
 link_batch = numpy.zeros((args.batch_size, S, S, 8))
 loc_batch = numpy.zeros((args.batch_size, S, S, int(locx.shape[3])))
 pmove_batch = numpy.zeros((args.batch_size, S*(S-2)))
-pwin_batch = numpy.zeros((args.batch_size, 1))
+pwin_batch = numpy.zeros((args.batch_size, pwin_size))
 
 prev_loss = None
 current_rate = args.learning_rate
@@ -173,7 +184,10 @@ def load_tensor_data(index, ls):
         nup /= nup.sum()
 
     pmove_batch[index,:] = nup
-    pwin_batch[index,0] = ls.z
+    if pwin_size == 1:
+        pwin_batch[index,0] = ls.z
+    else:
+        pwin_batch[index,:] = naf.one_to_three(ls.z)
 
 
 

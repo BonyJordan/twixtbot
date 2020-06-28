@@ -39,6 +39,8 @@ class Player:
 		else:
 		    rot = 0
 		pw, ml = nneval_.eval_one(nips)
+                if len(pw) == 3:
+                    pw = naf.three_to_one(pw)
 		return pw, naf.rotate_policy_array(ml, rot)
 	elif self.resource:
 	    nncli = kwargs.get("resources").get(self.resource)
@@ -48,10 +50,13 @@ class Player:
 		rot = random.randint(0, 3) if self.random_rotation else 0
 		nips.rotate(rot)
 		pw, ml_r = nncli.eval(nips)
+                if type(pw) != numpy.float32:
+                    assert pw.shape[0] == 3
+                    pw = naf.three_to_one(pw)
 		ml_0 = naf.rotate_policy_array(ml_r, rot)
 		return pw, ml_0
 	else:
-	    raise Exception("Specify one of client, model or socket")
+	    raise Exception("Specify model or resource")
 
 	self.nm = nnmcts.NeuralMCTS(nnfunc, add_noise=self.add_noise, smart_root=self.smart_root, verbosity=self.verbosity)
 

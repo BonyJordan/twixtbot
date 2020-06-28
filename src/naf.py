@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 import collections
+import math
 import numpy
 import sys
 
@@ -473,3 +474,19 @@ def rotate_policy_array(pa, r):
     if r & VFLIP_BIT:
 	x = vflip_policy_array(x)
     return x
+
+###
+
+def three_to_one(three):
+    """ Take a three-vector of logits and return a score between -1 and 1 """
+    lL, lD, lW = three
+    eL = math.exp(lL - lD)
+    eW = math.exp(lW - lD)
+    div = 1.0 + eL + eW
+    pW = eW / div
+    pL = eL / div
+    return pW - pL
+
+def one_to_three(one):
+    """ Take a score -1, 0, or 1, and return the three vector of labels """
+    return ((1,0,0),(0,1,0),(0,0,1))[one+1]

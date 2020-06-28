@@ -26,7 +26,14 @@ class Resource:
 	self.client.handle_read()
 
 	p0 = numpy.frombuffer(self.reply, dtype=numpy.float32)
-	assert p0.shape[0] == (twixt.Game.SIZE-1)**2
-	pwin = p0[0]
-	movelogits = p0[1:]
+        nml = twixt.Game.SIZE * (twixt.Game.SIZE-2)
+        if p0.shape[0] == nml + 1:
+            pwin = p0[0]
+            movelogits = p0[1:]
+        elif p0.shape[0] == nml + 3:
+            pwin = p0[0:3]
+            movelogits = p0[3:]
+        else:
+            raise TypeError("Unexpected shape:", p0.shape)
+
 	return pwin, movelogits

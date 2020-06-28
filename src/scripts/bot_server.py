@@ -8,8 +8,8 @@ import subprocess
 
 def main():
     parser = argparse.ArgumentParser("Generic Bot Server")
-    parser.add_argument("--location", "-l", type=str, required=True)
-    parser.add_argument("battle_args", type=str, nargs="+")
+    parser.add_argument("--location", "-l", type=str, default="/tmp/bs")
+    parser.add_argument("--battle_args", type=str, nargs="+", default=["-t", "asn_player:location=/tmp/loc1,trials=500,quiet=1"])
     args = parser.parse_args()
 
     if os.path.exists(args.location):

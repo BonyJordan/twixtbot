@@ -15,6 +15,10 @@ parser.add_argument('--num_pwin_hidden', type=int, default=80)
 parser.add_argument('--normalization_constant', type=float, default=1e-4)
 parser.add_argument('--pwin_constant', type=float, default=1.0)
 parser.add_argument('--use_recent_moves', action='store_true')
+parser.add_argument('--pwin_conv_padding', type=str, default='VALID')
+parser.add_argument('--pwin_reductions', type=int, default=2)
+parser.add_argument('--pwin_triple', action='store_true')
+parser.add_argument('--init_stdev', type=float, default=0.001)
 args = parser.parse_args()
 
 S = twixt.Game.SIZE
@@ -63,7 +67,7 @@ def residual_block(h0):
 
 
 def weight_variable(shape):
-    return tf.Variable(tf.random_normal(shape, stddev=0.001))
+    return tf.Variable(tf.random_normal(shape, stddev=args.init_stdev))
 
 def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1,1,1,1], padding='SAME')
@@ -89,31 +93,36 @@ def policy_head(h):
 
 def value_head(h):
     with tf.name_scope('pwin') as scope:
-	W1 = weight_variable([5, 5, args.num_conv_filters, args.num_conv_filters])
-	h1 = tf.nn.conv2d(h, W1, strides=[1,2,2,1], padding='VALID')
-	h2 = batch_norm(h1)
-	h3 = my_relu(h2)
+        hin = h
+        for i in range(args.pwin_reductions):
+            W = weight_variable([5, 5, args.num_conv_filters, args.num_conv_filters])
+            h1 = tf.nn.conv2d(hin, W, strides=[1,2,2,1], padding=args.pwin_conv_padding)
+            h2 = batch_norm(h1)
+            hin = my_relu(h2)
 
-	W2 = weight_variable([5, 5, args.num_conv_filters, args.num_conv_filters])
-	h4 = tf.nn.conv2d(h3, W2, strides=[1,2,2,1], padding='VALID')
-	h5 = batch_norm(h4)
-	h6 = my_relu(h5)
-
+        h6 = hin
 	h7 = tf.contrib.layers.flatten(h6)
 	W3 = weight_variable([h7.shape[1].value, args.num_pwin_hidden])
 	h8 = tf.matmul(h7, W3)
 	h9 = batch_norm(h8)
 	h10 = my_relu(h9)
-	W4 = weight_variable([args.num_pwin_hidden, 1])
-	h11 = tf.matmul(h10, W4)
-	return tf.tanh(h11, name=scope)
+        if args.pwin_triple:
+            W4 = weight_variable([args.num_pwin_hidden, 3])
+            return tf.matmul(h10, W4, name=scope)
+        else:
+            W4 = weight_variable([args.num_pwin_hidden, 1])
+            h11 = tf.matmul(h10, W4)
+            return tf.tanh(h11, name=scope)
 
 
 c_norm = args.normalization_constant
 pegx = tf.placeholder(tf.float32, [None, twixt.Game.SIZE, twixt.Game.SIZE, 2], name='pegx')
 linkx = tf.placeholder(tf.float32, [None, twixt.Game.SIZE, twixt.Game.SIZE, 8], name='linkx')
 locx = tf.placeholder(tf.float32, [None, twixt.Game.SIZE, twixt.Game.SIZE, num_location_planes()], name='locx')
-pwin_ = tf.placeholder(tf.float32, [None, 1], name='pwin_')
+if args.pwin_triple:
+    pwin3_ = tf.placeholder(tf.float32, [None, 3], name='pwin3_')
+else:
+    pwin_ = tf.placeholder(tf.float32, [None, 1], name='pwin_')
 pmove_ = tf.placeholder(tf.float32, [None, (twixt.Game.SIZE * (twixt.Game.SIZE - 2))], name='pmove_')
 learning_rate = tf.placeholder(tf.float32, shape=[], name="learning_rate")
 is_training = tf.placeholder(tf.bool, shape=[], name="is_training")
@@ -135,7 +144,10 @@ with tf.name_scope('loss'):
     for v in tf.trainable_variables():
 	norm = norm + tf.nn.l2_loss(v)
     l1 = tf.nn.softmax_cross_entropy_with_logits_v2(labels=pmove_, logits=movelogits, name="l1")
-    l2 = args.pwin_constant * tf.squared_difference(pwin_, pwin, name="l2")
+    if args.pwin_triple:
+        l2 = tf.nn.softmax_cross_entropy_with_logits_v2(labels=pwin3_, logits=pwin, name = "l2")
+    else:
+        l2 = args.pwin_constant * tf.squared_difference(pwin_, pwin, name="l2")
     l3 = tf.multiply(c_norm, norm, name="l3")
     loss = l1 + l2 + l3
 loss = tf.reduce_mean(loss, name="total_loss")

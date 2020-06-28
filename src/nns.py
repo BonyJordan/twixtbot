@@ -44,7 +44,8 @@ class NNServer(smmpp.Server):
             outs.append(b)
         return outs
 
+num_outputs = twixt.Game.SIZE * (twixt.Game.SIZE-2) + ne.pwin_size()
 
 server = NNServer(args.location, args.capacity, naf.NetInputs.EXPANDED_SIZE,
-    4*(twixt.Game.SIZE-1)**2, args.milestone_step)
+    4*num_outputs, args.milestone_step)
 server.run()

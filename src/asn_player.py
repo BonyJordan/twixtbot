@@ -126,9 +126,17 @@ class Player:
 
         def set_reply(reply):
             p0 = numpy.frombuffer(reply, dtype=numpy.float32)
-            assert p0.shape[0] == (twixt.Game.SIZE-1)**2
-            leaf.score = p0[0]
-            movelogits = naf.rotate_policy_array(p0[1:], rot)
+            nml = twixt.Game.SIZE * (twixt.Game.SIZE-2)
+
+            if p0.shape[0] == nml + 1:
+                leaf.score = p0[0]
+                movelogits = naf.rotate_policy_array(p0[1:], rot)
+            elif p0.shape[0] == nml + 3:
+                leaf.score = naf.three_to_one(p0[0:3])
+                movelogits = naf.rotate_policy_array(p0[3:], rot)
+            else:
+                raise TypeError("Bad shape:", p0.shape)
+
             maxlogit = movelogits[leaf.LMnz].max()
             el = numpy.exp(movelogits - maxlogit)
             divisor = el[leaf.LMnz].sum()
@@ -243,8 +251,9 @@ class Player:
         if not check.any():
             waiters = (node.Ns + node.Nf == 1)
             if waiters.any():
-                assert False
-                # FIX ME PLEASE
+                #print "list of waiters:", numpy.where(node.Ns + node.Nf == 1)
+                #print "num waiters", self.leaves_waiting
+                return "wait"
             else:
                 return "lose"
 

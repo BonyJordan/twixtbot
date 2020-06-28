@@ -14,8 +14,14 @@ GameInfo = collections.namedtuple("GameInfo", "game_id popen moves draw_offer")
 
 def find_moves_for_game(session, game_id):
     move_re = re.compile("(b|r)\[([a-x][a-x]|swap|SWAP)(\|draw)?\]")
+    size_re = re.compile("SZ\[(\d+)\]")
     url = "http://www.littlegolem.net/servlet/sgf/%s/game%s.tsgf" % (game_id, game_id)
     resp = session.get(url)
+
+    mo = size_re.search(resp.text)
+    assert mo,  (resp.text)
+    assert mo.group(1) == "24"
+
     moves = []
     draw_offer = False
     prev_color = 'r'
@@ -57,12 +63,18 @@ def find_games(session, verbose=False):
         
 
 def handle_invites(session):
-    resp = session.get('http://www.littlegolem.net/jsp/invitation/index.jsp')
+    try:
+        resp = session.get('http://www.littlegolem.net/jsp/invitation/index.jsp')
+    except requests.exceptions.ConnectionError as e:
+        print e
+        return "CE"
+
     soup = BeautifulSoup(resp.text, 'html.parser')
 
     a = soup.find(string="Invitations from other players")
     if a is None:
         print "IfOP not found"
+        print soup.prettify().encode('utf-8')
         return 0
     table = a.find_next('table')
     first = True
@@ -99,24 +111,25 @@ def handle_invites(session):
 
     return count
 
-def start_thinking_for_game(movelist, loc):
+def start_thinking_for_game(movelist, loc, time):
     #cmd = ["./one.py", "-m", ",".join(movelist), "-r",
     #    "nnclient:location=%s,name=net" % (loc), "-t",
     #    "nnmplayer:resource=net,trials=5000,use_swap=1", "-T"]
     cmd = ["./one.py", "-m", ",".join(movelist),
-        "-t", "asn_player:trials=50000,location=/tmp/loc1", "-T"]
+        "-t", "asn_player:trials=%d,location=%s" % (time, loc), "-T"]
 
     print "start for game:", game_id
     print " ".join(cmd)
     sys.stdout.flush()
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     return p
 
 def stop_thinking_for_game(gi):
     #####
     out, err = gi.popen.communicate()
     print "stop for game:", gi.game_id, "draw offer:", gi.draw_offer
-    print out
+    print "--OUT--\n", out
+    print "--RETURNCODE--\n", gi.popen.returncode
     sys.stdout.flush()
 
     lines = out.splitlines()
@@ -139,7 +152,7 @@ def stop_thinking_for_game(gi):
         print "low score (%g): resign" % score
         move = "resign"
 
-    if gi.draw_offer and float(score_text) < -0.1 and len(gi.moves) > 10:
+    if gi.draw_offer and score_text != "fwin" and float(score_text) < -0.1 and len(gi.moves) > 10:
         move = "draw"
 
     if gi.draw_offer and move is None:
@@ -171,6 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--password", type=str, required=True)
     parser.add_argument("-M", "--max_thinking_games", type=int, default=10)
     parser.add_argument("-l", "--location", type=str, default="/tmp/loc1")
+    parser.add_argument("-t", "--time", type=int, default=50000)
     args = parser.parse_args()
 
     session = requests.Session()
@@ -189,13 +203,18 @@ if __name__ == "__main__":
         for game_id in rids:
             del thinking_games[game_id]
 
-        handle_invites(session)
+        he = handle_invites(session)
+        if he == "CE":
+            print "extra sleeping"
+            time.sleep(1800)
+            continue
+
         game_list = find_games(session)
         for game_id in game_list:
             if game_id in thinking_games or len(thinking_games) > args.max_thinking_games:
                 continue
             move_list, draw_offer = find_moves_for_game(session, game_id)
-            popen = start_thinking_for_game(move_list, args.location)
+            popen = start_thinking_for_game(move_list, args.location, args.time)
             thinking_games[game_id] = GameInfo(game_id, popen, move_list, draw_offer)
         else:
             print "no games.  sleep"
