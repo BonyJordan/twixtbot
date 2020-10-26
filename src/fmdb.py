@@ -6,6 +6,19 @@ import sys
 
 import twixt
 
+# Nothing uses this, I am providing it for reference in case you want
+# to make your own "first move database" in MySQL.
+_create_table_sql = """
+CREATE TABLE `first_move_v2` (
+  `model_id` int(11) NOT NULL,
+  `move` varchar(3) NOT NULL,
+  `white` int(11) NOT NULL,
+  `black` int(11) NOT NULL,
+  `draws` int(11) NOT NULL,
+  `visits` int(11) NOT NULL,
+  PRIMARY KEY (`model_id`,`move`)
+"""
+
 class FirstMoveDB:
     def __init__(self, model_id=1): 
 	self.conn = None
